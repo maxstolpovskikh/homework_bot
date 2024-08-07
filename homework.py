@@ -1,14 +1,14 @@
-import json
 import logging
 import os
 import time
 from datetime import datetime
 from http import HTTPStatus
 
-from dotenv import load_dotenv
-from requests import exceptions as req_excpt
 import requests
+from dotenv import load_dotenv
 from telebot import TeleBot
+
+from exceptions import AbsentEnvironmentVariable, ResponseNot200
 
 load_dotenv()
 
@@ -30,7 +30,6 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 RETRY_PERIOD = 600
-START_PRACTICUM = 1549962000
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -40,24 +39,6 @@ HOMEWORK_VERDICTS = {
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
-
-
-class AbsentEnvironmentVariable(Exception):
-    """Класс исключения для переменных окружения."""
-
-    def __init__(self, *args):
-        """Инициализация."""
-        self.arg = args[0] if args else None
-
-    def __str__(self):
-        """Текст ислючения."""
-        return ('Отсутствует обязательная переменная окружения: '
-                f'\'{self.arg}\' '
-                'Программа принудительно остановлена.')
-
-
-class ResponseNot200(Exception):
-    """Ответ сервера не равен 200."""
 
 
 def check_tokens():
@@ -89,7 +70,7 @@ def get_api_answer(timestamp):
         headers = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
         payload = {'from_date': timestamp}
         response = requests.get(ENDPOINT, headers=headers, params=payload)
-        if response.status_code != 200:
+        if response.status_code != HTTPStatus.OK:
             logger.error(f'Сбой в работе программы: Эндпоинт {ENDPOINT}, '
                          f'HTTPStatus: {response.status_code}')
             raise ResponseNot200
