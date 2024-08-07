@@ -91,7 +91,8 @@ def check_response(response):
         logger.error('Сбой: response[\'homeworks\'] не list')
         raise TypeError
     homework = response.get('homeworks')
-    return homework[0]
+    if len(homework) > 0:
+        return homework[0]
 
 
 def parse_status(homework):
@@ -127,7 +128,6 @@ def main():
         try:
             response = get_api_answer(timestamp)
             homework = check_response(response)
-            print(homework)
             if homework and tmp_status != homework.get('status'):
                 message = parse_status(homework)
                 send_message(bot, message)
