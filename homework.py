@@ -43,20 +43,17 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    try:
-        if not TELEGRAM_TOKEN:
-            raise AbsentEnvironmentVariable('TELEGRAM_TOKEN')
-        if not TELEGRAM_CHAT_ID:
-            raise AbsentEnvironmentVariable('TELEGRAM_CHAT_ID')
-        if not PRACTICUM_TOKEN:
-            raise AbsentEnvironmentVariable('PRACTICUM_TOKEN')
-    except AbsentEnvironmentVariable as error:
-        logger.critical(error)
-        quit()
+    if not TELEGRAM_TOKEN:
+        raise AbsentEnvironmentVariable('TELEGRAM_TOKEN')
+    if not TELEGRAM_CHAT_ID:
+        raise AbsentEnvironmentVariable('TELEGRAM_CHAT_ID')
+    if not PRACTICUM_TOKEN:
+        raise AbsentEnvironmentVariable('PRACTICUM_TOKEN')
 
 
 def send_message(bot, message):
     """Отправка сообщений в Telegram."""
+    logger.debug(f'Отправка сообщения: {message}')
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logger.debug(f'Сообщение отправлено: {message}')
@@ -66,50 +63,38 @@ def send_message(bot, message):
 
 def get_api_answer(timestamp):
     """Получение данных из YaPracticum."""
+    headers = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
+    payload = {'from_date': timestamp}
     try:
-        headers = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
-        payload = {'from_date': timestamp}
         response = requests.get(ENDPOINT, headers=headers, params=payload)
-        if response.status_code != HTTPStatus.OK:
-            logger.error(f'Сбой в работе программы: Эндпоинт {ENDPOINT}, '
-                         f'HTTPStatus: {response.status_code}')
-            raise ResponseNot200
     except requests.RequestException as error:
         logger.error(f'Сбой в работе программы {error}')
+    if response.status_code != HTTPStatus.OK:
+        raise ResponseNot200
     return response.json()
 
 
 def check_response(response):
     """Проверяет ответ API."""
-    if 'homeworks' not in response:
-        logger.error('Сбой: в response отсутствует homeworks')
-        raise TypeError
     if not isinstance(response, dict):
-        logger.error('Сбой: response не dict')
-        raise TypeError
-    if not isinstance(response['homeworks'], list):
-        logger.error('Сбой: response[\'homeworks\'] не list')
-        raise TypeError
-    homework = response.get('homeworks')
-    if len(homework) > 0:
-        return homework[0]
+        raise TypeError(type(dict))
+    if 'homeworks' not in response:
+        raise KeyError('homeworks not in response')
+    homeworks = response['homeworks']
+    if not isinstance(homeworks, list):
+        raise TypeError(type(list))
+    return homeworks
 
 
 def parse_status(homework):
     """Извлекает информацию из homeworks."""
     if 'status' not in homework:
-        logger.error('Сбой: в homework отсутствует status')
-        raise TypeError
+        raise KeyError('status not in homework')
     if 'homework_name' not in homework:
-        logger.error('Сбой: в homework отсутствует homework_name')
-        raise TypeError
+        raise KeyError('homework_name not in homework')
     status = homework.get('status')
     if status not in HOMEWORK_VERDICTS:
-        logger.error('Сбой: неизвестный статус')
-        raise TypeError
-    if status == '':
-        logger.error('Сбой: пустой статус')
-        raise TypeError
+        raise KeyError('status not in HOMEWORK_VERDICTS')
     homework_name = homework.get('homework_name')
     verdict = HOMEWORK_VERDICTS[status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -117,7 +102,11 @@ def parse_status(homework):
 
 def main():
     """Основная логика работы бота."""
-    check_tokens()
+    try:
+        check_tokens()
+    except AbsentEnvironmentVariable as error:
+        logger.critical(error)
+        quit()
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     now = datetime.now()
@@ -128,16 +117,20 @@ def main():
         try:
             response = get_api_answer(timestamp)
             homework = check_response(response)
-            if homework and tmp_status != homework.get('status'):
+            if homework != []:
+                homework = homework[0]
+                status = homework.get('status')
+            if homework and status and tmp_status != status:
                 message = parse_status(homework)
                 send_message(bot, message)
-            time.sleep(RETRY_PERIOD)
+                tmp_status = status
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             if errors:
                 errors = False
                 send_message(bot, message)
             logger.critical(message)
+        finally:
             time.sleep(RETRY_PERIOD)
 
 
