@@ -77,12 +77,12 @@ def get_api_answer(timestamp):
 def check_response(response):
     """Проверяет ответ API."""
     if not isinstance(response, dict):
-        raise TypeError(type(dict))
+        raise TypeError(f'responce is not a dict, this is {type(response)}')
     if 'homeworks' not in response:
         raise KeyError('homeworks not in response')
     homeworks = response['homeworks']
     if not isinstance(homeworks, list):
-        raise TypeError(type(list))
+        raise TypeError(f'homeworks is not a list, this is {type(homeworks)}')
     return homeworks
 
 
@@ -92,10 +92,10 @@ def parse_status(homework):
         raise KeyError('status not in homework')
     if 'homework_name' not in homework:
         raise KeyError('homework_name not in homework')
-    status = homework.get('status')
+    status = homework['status']
     if status not in HOMEWORK_VERDICTS:
         raise KeyError('status not in HOMEWORK_VERDICTS')
-    homework_name = homework.get('homework_name')
+    homework_name = homework['homework_name']
     verdict = HOMEWORK_VERDICTS[status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -109,21 +109,17 @@ def main():
         quit()
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
-    now = datetime.now()
-    send_message(bot, f'Бот запущен! {now.strftime("%d.%m.%Y %H:%M")}')
-    tmp_status = 'reviewing'
     errors = True
     while True:
         try:
             response = get_api_answer(timestamp)
             homework = check_response(response)
-            if homework != []:
+            if homework:
                 homework = homework[0]
-                status = homework.get('status')
-            if homework and status and tmp_status != status:
                 message = parse_status(homework)
                 send_message(bot, message)
-                tmp_status = status
+            else:
+                logger.debug('Список домашних работ пуст')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             if errors:
